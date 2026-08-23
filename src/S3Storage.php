@@ -162,13 +162,18 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
     public function bucketRegion(string $bucket): ?string
     {
         try {
-            $loc = $this->client()->getBucketLocation(['Bucket' => $bucket])['LocationConstraint'];
+            // determineBucketRegion(), NOT getBucketLocation(). The latter is
+            // itself signed for the client's region, so asking it about a
+            // bucket in another region fails with AuthorizationHeaderMalformed
+            // — it cannot answer the one question worth asking it. The SDK
+            // helper exists precisely for this and reads the region off the
+            // redirect instead.
+            return $this->client()->determineBucketRegion($bucket);
         } catch (\Throwable $e) {
+            // Denied by policy, or the bucket does not exist. The caller keeps
+            // the configured region and lets the write probe fail loudly.
             return null;
         }
-
-        // The API returns '' (or null) for the original us-east-1 region.
-        return $loc ?: 'us-east-1';
     }
 
     // ─── stage 2: the bucket ───
@@ -438,11 +443,36 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
             'SignatureDoesNotMatch' => trans('s3::messages.error.bad_secret'),
             'AccessDenied' => trans('s3::messages.error.access_denied'),
             'NoSuchBucket' => trans('s3::messages.error.no_such_bucket'),
+            'AuthorizationHeaderMalformed', 'PermanentRedirect' => $this->wrongRegionMessage($e),
             default => trans('s3::messages.error.vendor', [
                 'code' => $e->getAwsErrorCode() ?: 'unknown',
                 'message' => $e->getAwsErrorMessage() ?: $e->getMessage(),
             ]),
         };
+    }
+
+    /**
+     * A wrong-region refusal, phrased as something to act on.
+     *
+     * Normally unreachable — the settings screen adopts the bucket's own region
+     * before it ever writes. It still happens when GetBucketLocation is denied
+     * by the key's policy, and AWS helpfully names the region it wanted, so
+     * lift that out rather than making the admin read a signing error.
+     */
+    private function wrongRegionMessage(AwsException $e): string
+    {
+        $raw = $e->getAwsErrorMessage() ?: $e->getMessage();
+
+        if (preg_match("/expecting '([a-z0-9-]+)'/", $raw, $m) === 1) {
+            return trans('s3::messages.error.wrong_region_known', [
+                'bucket' => $this->options['bucket'] ?? '',
+                'region' => $m[1],
+            ]);
+        }
+
+        return trans('s3::messages.error.wrong_region', [
+            'bucket' => $this->options['bucket'] ?? '',
+        ]);
     }
 
     private function client(): S3Client

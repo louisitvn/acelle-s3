@@ -35,8 +35,14 @@
         <dl class="mc-definition-list">
             <dt>{{ trans('s3::messages.field.access_key') }}</dt>
             <dd><code>{{ $options['access_key'] ?? '' }}</code></dd>
-            <dt>{{ trans('s3::messages.field.region') }}</dt>
-            <dd><code>{{ $options['region'] ?? '' }}</code></dd>
+            @if (!empty($options['region']))
+                {{-- Derived from the bucket, never chosen by hand. --}}
+                <dt>{{ trans('s3::messages.field.region') }}</dt>
+                <dd>
+                    <code>{{ $options['region'] }}</code>
+                    @if ($regionLabel)<span class="mc-text-muted">— {{ $regionLabel }}</span>@endif
+                </dd>
+            @endif
         </dl>
 
         <form method="POST" style="margin-top:var(--space-3)"
@@ -53,16 +59,6 @@
 <div class="mc-card" style="margin-bottom:var(--space-4);max-width:760px">
     <div class="mc-card-body">
         <h2 class="mc-card-title">{{ trans('s3::messages.section.bucket') }}</h2>
-
-        @if ($regionMismatch)
-            <div class="mc-alert mc-alert-warning" style="margin-bottom:var(--space-3)">
-                <span class="material-symbols-rounded" aria-hidden="true">warning</span>
-                {{ trans('s3::messages.warning.region_mismatch', [
-                    'configured' => $options['region'] ?? '',
-                    'actual' => $regionMismatch,
-                ]) }}
-            </div>
-        @endif
 
         <form method="POST" action="{{ action([\Acelle\S3\Controllers\SettingsController::class, 'save']) }}">
             @csrf

@@ -38,18 +38,13 @@ class SettingsController extends Controller
         }
 
         $driver = new S3Storage($options);
-        $listing = $driver->listBuckets();
 
-        // A bucket in another region still reads and writes (the SDK follows
-        // the redirect) but yields a public URL that 404s, so surface the
-        // mismatch instead of letting it produce broken image links.
-        $regionMismatch = null;
-        if (!empty($options['bucket'])) {
-            $actual = $driver->bucketRegion($options['bucket']);
-            if ($actual !== null && $actual !== ($options['region'] ?? null)) {
-                $regionMismatch = $actual;
-            }
-        }
+        // One call, and it is global — every bucket on the account regardless
+        // of region. Resolving each bucket's region for the dropdown was
+        // measured at 12s serially and 6s in parallel for 11 buckets, and it
+        // grows with the account, so the region is resolved for the ONE bucket
+        // that gets chosen instead (see save()).
+        $listing = $driver->listBuckets();
 
         return view('s3::settings', [
             'plugin' => Plugin::getByName(self::PLUGIN),
@@ -57,9 +52,8 @@ class SettingsController extends Controller
             'buckets' => $listing['buckets'],
             'bucketListingFailed' => !$listing['ok'],
             'bucketListingMessage' => $listing['message'],
-            'regionMismatch' => $regionMismatch,
+            'regionLabel' => S3Storage::REGIONS[$options['region'] ?? ''] ?? null,
             'bucketUrl' => !empty($options['bucket']) ? $driver->bucketUrl() : null,
-            'regions' => S3Storage::REGIONS,
             'isConfigured' => !empty($options['bucket']),
             'isActive' => StorageEngine::where('is_active', true)->value('driver') === S3Storage::key(),
             'activeDriver' => StorageEngine::where('is_active', true)->value('driver'),
@@ -72,7 +66,6 @@ class SettingsController extends Controller
 
         return view('s3::connect', [
             'plugin' => Plugin::getByName(self::PLUGIN),
-            'regions' => S3Storage::REGIONS,
             'options' => $this->engineRow()->maskedOptions(),
         ]);
     }
@@ -88,10 +81,14 @@ class SettingsController extends Controller
         $engine = $this->engineRow();
         $secretRule = !empty($engine->options['secret_key']) ? 'nullable' : 'required';
 
+        // No region here on purpose. An IAM key is global — it is not bound to
+        // a region — and ListBuckets is a global call that returns every bucket
+        // on the account whatever region the client was built for. Only the
+        // BUCKET has a region, and it is resolved from the bucket in save().
+        // Asking for it at this point would be asking the admin to guess.
         $validated = $request->validate([
             'access_key' => 'required|string|max:255',
             'secret_key' => $secretRule.'|string|max:255',
-            'region' => 'required|string|in:'.implode(',', array_keys(S3Storage::REGIONS)),
         ]);
 
         $engine->driver = S3Storage::key();
@@ -133,7 +130,24 @@ class SettingsController extends Controller
             'public_base_url' => 'nullable|url|max:255',
         ]);
 
+        $previousRegion = $engine->decryptedOptions()['region'] ?? null;
         $engine->mergeOptions($validated);
+
+        // The region follows the BUCKET, not the other way round.
+        //
+        // A bucket lives in exactly one region and S3 signs every request with
+        // it, so a bucket picked from the list while the account is set to a
+        // different region fails with AuthorizationHeaderMalformed. Asking an
+        // admin to have guessed the right region one screen earlier is a
+        // puzzle, not a setting — and it was unescapable, because the probe
+        // refused the save and the mismatch warning only rendered for a bucket
+        // already stored. Look it up and adopt it.
+        $actualRegion = (new S3Storage($engine->decryptedOptions()))
+            ->bucketRegion($validated['bucket']);
+
+        if ($actualRegion !== null) {
+            $engine->mergeOptions(['region' => $actualRegion]);
+        }
 
         $probe = (new S3Storage($engine->decryptedOptions()))->probe();
 
@@ -144,6 +158,11 @@ class SettingsController extends Controller
         $engine->save();
 
         $message = trans('s3::messages.saved');
+
+        // Say so rather than silently changing something they chose.
+        if ($actualRegion !== null && $actualRegion !== $previousRegion) {
+            $message .= ' '.trans('s3::messages.region_adopted', ['region' => $actualRegion]);
+        }
         foreach ($probe->warnings as $warning) {
             $message .= ' '.$warning;
         }
