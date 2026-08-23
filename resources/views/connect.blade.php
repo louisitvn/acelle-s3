@@ -80,56 +80,95 @@
         <div class="s3-pitch-illust">
             {{-- Wireframe style + --illust-* tokens, so it follows the theme
                  with no dark-mode variant to maintain. --}}
-            <svg viewBox="0 0 320 240" fill="none" xmlns="http://www.w3.org/2000/svg" role="img"
+            <svg viewBox="0 0 340 250" fill="none" xmlns="http://www.w3.org/2000/svg" role="img"
                  aria-label="{{ trans('s3::messages.pitch.illust_alt') }}">
+                <defs>
+                    {{-- Volume comes from gradients rather than outlines: a flat
+                         wireframe reads as a diagram, not an object. --}}
+                    <linearGradient id="s3-drum-a" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%"   stop-color="var(--color-teal)" stop-opacity=".95"/>
+                        <stop offset="100%" stop-color="var(--color-teal)" stop-opacity=".55"/>
+                    </linearGradient>
+                    <linearGradient id="s3-drum-b" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%"   stop-color="var(--color-teal)" stop-opacity=".72"/>
+                        <stop offset="100%" stop-color="var(--color-teal)" stop-opacity=".38"/>
+                    </linearGradient>
+                    <linearGradient id="s3-drum-c" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%"   stop-color="var(--color-teal)" stop-opacity=".5"/>
+                        <stop offset="100%" stop-color="var(--color-teal)" stop-opacity=".24"/>
+                    </linearGradient>
+                    <radialGradient id="s3-glow" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%"   stop-color="var(--color-teal)" stop-opacity=".16"/>
+                        <stop offset="100%" stop-color="var(--color-teal)" stop-opacity="0"/>
+                    </radialGradient>
+                    <linearGradient id="s3-card" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stop-color="var(--color-card-bg)"/>
+                        <stop offset="100%" stop-color="var(--illust-bg)"/>
+                    </linearGradient>
+                </defs>
 
-                {{-- backdrop --}}
-                <ellipse cx="160" cy="196" rx="118" ry="16" fill="var(--illust-bg)"/>
+                <circle cx="170" cy="128" r="118" fill="url(#s3-glow)"/>
+                <ellipse cx="170" cy="221" rx="96" ry="13" fill="var(--illust-bg)"/>
 
-                {{-- cloud --}}
-                <path d="M96 62c0-13 11-24 24-24 9 0 17 5 21 12a18 18 0 0 1 27 11 16 16 0 0 1-3 32H99a19 19 0 0 1-3-31z"
-                      fill="var(--illust-fill)" stroke="var(--illust-stroke)" stroke-width="1.5" stroke-linejoin="round"/>
-
-                {{-- objects falling into the bucket --}}
-                <rect x="118" y="86" width="26" height="20" rx="3"
-                      fill="var(--color-card-bg)" stroke="var(--illust-stroke)" stroke-width="1.4"/>
-                <line x1="124" y1="93" x2="138" y2="93" stroke="var(--illust-stroke-bold)" stroke-width="1.6" stroke-linecap="round"/>
-                <line x1="124" y1="99" x2="133" y2="99" stroke="var(--illust-stroke)" stroke-width="1.4" stroke-linecap="round"/>
-
-                <rect x="152" y="92" width="26" height="20" rx="3"
-                      fill="var(--color-card-bg)" stroke="var(--illust-stroke)" stroke-width="1.4"/>
-                <circle cx="160" cy="102" r="3.4" fill="var(--illust-teal)" stroke="var(--color-teal)" stroke-width="1"/>
-                <path d="M166 108l5-6 4 5" stroke="var(--illust-stroke)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-
-                {{-- the bucket: three stacked layers --}}
+                {{-- One cylinder, banded to read as stacked layers.
+                     The side wall spans ellipse CENTRE to ellipse CENTRE
+                     (118 → 200), because that is where an ellipse is at its
+                     widest. Running it to the ellipse's top edge instead — the
+                     obvious way — leaves the wall wider than the curve and
+                     square shoulders poke out at every seam. --}}
                 <g>
-                    <ellipse cx="160" cy="132" rx="62" ry="15"
-                             fill="var(--illust-teal)" stroke="var(--color-teal)" stroke-width="1.6"/>
-                    <path d="M98 132v20c0 8 28 15 62 15s62-7 62-15v-20"
-                          fill="var(--illust-fill)" stroke="var(--illust-stroke)" stroke-width="1.5"/>
-                    <ellipse cx="160" cy="152" rx="62" ry="15"
-                             fill="var(--illust-bg)" stroke="var(--illust-stroke)" stroke-width="1.4"/>
-                    <path d="M98 152v18c0 8 28 15 62 15s62-7 62-15v-18"
-                          fill="var(--illust-fill)" stroke="var(--illust-stroke)" stroke-width="1.5"/>
-                    <ellipse cx="160" cy="170" rx="62" ry="15"
-                             fill="var(--illust-bg)" stroke="var(--illust-stroke)" stroke-width="1.4"/>
+                    <rect x="104" y="118" width="132" height="82" fill="url(#s3-drum-b)"/>
+                    <ellipse cx="170" cy="200" rx="66" ry="21" fill="url(#s3-drum-a)"/>
+
+                    {{-- seams: narrower + softer so they read as bands, not edges --}}
+                    <ellipse cx="170" cy="146" rx="66" ry="21" fill="url(#s3-drum-c)" opacity=".85"/>
+                    <ellipse cx="170" cy="173" rx="66" ry="21" fill="url(#s3-drum-b)" opacity=".85"/>
+
+                    {{-- open top --}}
+                    <ellipse cx="170" cy="118" rx="66" ry="21"
+                             fill="var(--color-card-bg)" fill-opacity=".55"
+                             stroke="var(--color-teal)" stroke-width="1.5" stroke-opacity=".7"/>
+                    <ellipse cx="170" cy="118" rx="44" ry="13" fill="var(--color-teal)" fill-opacity=".18"/>
                 </g>
 
-                {{-- durability tick --}}
-                <circle cx="222" cy="118" r="15" fill="var(--illust-teal)" stroke="var(--color-teal)" stroke-width="1.3"/>
-                <path d="M215 118l5 5 10-11" stroke="var(--color-teal)" stroke-width="2.2"
+                {{-- objects dropping in, tilted so they feel in motion --}}
+                <g transform="rotate(-9 132 62)">
+                    <rect x="108" y="44" width="48" height="36" rx="6" fill="url(#s3-card)"
+                          stroke="var(--illust-stroke)" stroke-width="1.3"/>
+                    <rect x="116" y="54" width="24" height="3" rx="1.5" fill="var(--illust-stroke-bold)"/>
+                    <rect x="116" y="62" width="32" height="3" rx="1.5" fill="var(--illust-stroke)"/>
+                    <rect x="116" y="70" width="18" height="3" rx="1.5" fill="var(--illust-stroke)"/>
+                </g>
+                <g transform="rotate(11 208 56)">
+                    <rect x="186" y="34" width="44" height="34" rx="6" fill="url(#s3-card)"
+                          stroke="var(--illust-stroke)" stroke-width="1.3"/>
+                    <circle cx="198" cy="46" r="4" fill="var(--color-teal)" fill-opacity=".55"/>
+                    <path d="M190 62l11-12 9 9 6-5 8 8z" fill="var(--color-teal)" fill-opacity=".3"/>
+                </g>
+
+                {{-- motion hints into the mouth of the stack --}}
+                <path d="M140 86c4 9 8 15 14 20" stroke="var(--color-teal)" stroke-opacity=".55"
+                      stroke-width="2" stroke-linecap="round" stroke-dasharray="2 7"/>
+                <path d="M204 74c-3 12-8 20-14 26" stroke="var(--color-teal)" stroke-opacity=".45"
+                      stroke-width="2" stroke-linecap="round" stroke-dasharray="2 7"/>
+
+                {{-- durability seal --}}
+                <circle cx="256" cy="150" r="21" fill="var(--color-card-bg)"
+                        stroke="var(--color-teal)" stroke-width="2"/>
+                <path d="M246 150l7 7 14-15" stroke="var(--color-teal)" stroke-width="3"
                       stroke-linecap="round" stroke-linejoin="round"/>
 
-                {{-- delivery nodes --}}
-                <circle cx="62" cy="112" r="11" fill="var(--color-card-bg)" stroke="var(--illust-stroke)" stroke-width="1.4"/>
-                <path d="M57 112h10M62 107v10" stroke="var(--illust-stroke-bold)" stroke-width="1.4" stroke-linecap="round"/>
-                <path d="M73 116c10 6 16 10 25 14" stroke="var(--illust-stroke)" stroke-width="1.3"
-                      stroke-linecap="round" stroke-dasharray="3 4"/>
+                {{-- delivery edge node --}}
+                <circle cx="74" cy="150" r="17" fill="var(--color-card-bg)"
+                        stroke="var(--illust-stroke)" stroke-width="1.5"/>
+                <path d="M74 142v16M66 150h16" stroke="var(--illust-stroke-bold)" stroke-width="1.6" stroke-linecap="round"/>
+                <ellipse cx="74" cy="150" rx="7" ry="16" stroke="var(--illust-stroke)" stroke-width="1.2"/>
+                <path d="M91 158q12 8 22 12" stroke="var(--illust-stroke)" stroke-width="1.4"
+                      stroke-linecap="round" stroke-dasharray="3 5"/>
 
-                {{-- sparkles --}}
-                <circle cx="252" cy="66" r="3" fill="var(--illust-chart-2)"/>
-                <circle cx="72" cy="58" r="2.5" fill="var(--illust-teal)"/>
-                <circle cx="268" cy="158" r="2.5" fill="var(--illust-chart-3)"/>
+                <circle cx="286" cy="72" r="4" fill="var(--color-teal)" fill-opacity=".5"/>
+                <circle cx="58" cy="86" r="3" fill="var(--color-teal)" fill-opacity=".35"/>
+                <circle cx="300" cy="192" r="2.5" fill="var(--color-teal)" fill-opacity=".3"/>
             </svg>
         </div>
 

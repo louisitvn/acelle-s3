@@ -4,6 +4,10 @@ return array (
   'title' => 'Amazon S3 storage',
   'subtitle' => 'Keep customer media, campaign attachments and template thumbnails in an S3 bucket instead of on the application server disk.',
 
+  'nav.group' => 'PLUGINS',
+  'nav.storage_engine' => 'Storage Engine',
+  'nav.badge' => 'plugin',
+
   'connect.heading' => 'Connect an AWS account',
   'connect.intro' => 'Enter an access key with permission to read and write your bucket. The key is verified before it is saved, and the secret is encrypted at rest.',
 

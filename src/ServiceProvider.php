@@ -3,6 +3,7 @@
 namespace Acelle\S3;
 
 use Illuminate\Support\ServiceProvider as Base;
+use Illuminate\Support\Facades\Auth;
 use App\Library\Facades\Hook;
 use App\Library\Storage\StorageEngineRegistry;
 use App\Model\StorageEngine;
@@ -54,15 +55,47 @@ class ServiceProvider extends Base
         // drivers. It also sidesteps the boot-order dependency a
         // Hook::collect() would introduce.
         //
-        // Safe to register unconditionally, including while the plugin is
-        // disabled: registering only makes the engine *selectable*. Nothing is
-        // stored here until an admin configures and activates it.
+        // UNCONDITIONAL, including while the plugin is disabled. Registering
+        // makes the engine *known*, not *chosen* — and the configuration flow
+        // depends on it: StorageEngine::mergeOptions() asks the registry which
+        // fields are secret, so gating this deadlocks setup. Configuring needs
+        // registration; activating refuses an unconfigured engine.
+        //
+        // What the active flag gates is VISIBILITY (the sidebar group below).
+        // Selecting the engine is separately gated by the host, which refuses
+        // any engine with no configuration row.
         StorageEngineRegistry::register(S3Storage::key(), S3Storage::class);
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 's3');
+
+        // Routes load either way: the settings screen has to be reachable
+        // BEFORE activation, because activation refuses an unconfigured engine.
         $this->loadRoutesFrom(__DIR__ . '/../routes.php');
 
         Hook::set('icon_url_acelle/s3', fn () => route('plugin.acelle.s3.icon'));
+
+        // A "Plugins" group pinned to the top of the admin sidebar, with one
+        // entry pointing at the HOST's storage-engine picker rather than at
+        // this plugin's own settings. The picker is where the choice actually
+        // lives; sending admins somewhere else would split one decision across
+        // two screens.
+        //
+        // The group is contributed rather than owned: a second plugin adding to
+        // 'admin.sidebar.groups.top' renders its own group, which is why the
+        // markup is self-contained.
+        Hook::add('admin.sidebar.groups.top', function () {
+            if (!$this->isActive()) {
+                return null;
+            }
+            if (!Auth::check() || Auth::user()->admin === null) {
+                return null;
+            }
+            if (Auth::user()->admin->getPermission('setting_general') !== 'yes') {
+                return null;
+            }
+
+            return view('s3::nav_group')->render();
+        });
 
         // Refuse to activate an engine that is not configured — Plugin::activate()
         // propagates the throw and the admin UI renders it as a 422.
@@ -107,5 +140,22 @@ class ServiceProvider extends Base
 
             $engine->delete();
         });
+    }
+
+    /**
+     * Is this plugin switched on?
+     *
+     * Reads the plugin index file rather than the plugins table — this is
+     * called on every request, and a DB query in a provider's boot() is the
+     * thing the host's autoloadWithoutDbQuery() exists to avoid. Memoised for
+     * the request because the sidebar hook and the engine registration both
+     * ask.
+     */
+    private function isActive(): bool
+    {
+        static $active = null;
+
+        return $active ??= \App\Model\Plugin::getPluginInfoByName(self::PLUGIN, 'status')
+            === \App\Model\Plugin::STATUS_ACTIVE;
     }
 }
