@@ -31,7 +31,12 @@ Route::group([
     'namespace'  => '\Acelle\S3\Controllers',
     'prefix'     => 'plugins/acelle/s3',
 ], function () {
+    // index() routes between the two stages from what is stored, so there is
+    // no way to reach the bucket form without valid credentials.
     Route::get('/', 'SettingsController@index')->name('plugin.acelle.s3.settings');
+    Route::get('connect', 'SettingsController@connectForm')->name('plugin.acelle.s3.connect_form');
+    Route::post('connect', 'SettingsController@connect')->name('plugin.acelle.s3.connect');
+    Route::post('disconnect', 'SettingsController@disconnect')->name('plugin.acelle.s3.disconnect');
     Route::post('save', 'SettingsController@save')->name('plugin.acelle.s3.save');
     Route::post('activate', 'SettingsController@activate')->name('plugin.acelle.s3.activate');
     Route::post('deactivate', 'SettingsController@deactivate')->name('plugin.acelle.s3.deactivate');

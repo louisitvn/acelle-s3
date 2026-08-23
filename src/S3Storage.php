@@ -3,7 +3,6 @@
 namespace Acelle\S3;
 
 use Aws\S3\S3Client;
-use Aws\S3\Exception\S3Exception;
 use Aws\Exception\AwsException;
 use Symfony\Component\HttpFoundation\File\File;
 use App\Library\Storage\StorageInterface;
@@ -12,26 +11,51 @@ use App\Library\Storage\Capabilities\ProvidesPublicUrl;
 use App\Library\Storage\ProbeResult;
 
 /**
- * S3-compatible object storage.
+ * Amazon S3.
+ *
+ * Scope: Amazon S3 only. Another vendor is another plugin — that is the whole
+ * point of the engine registry, and it keeps this class free of the `endpoint`
+ * / `path_style` / ACL-dialect branching that "S3-compatible" support drags in.
+ * Because the vendor is fixed, the public URL of a bucket is DERIVABLE here,
+ * which a multi-vendor driver could never do.
  *
  * Talks to the AWS SDK directly rather than through Flysystem: the SDK is
  * already a host dependency (it ships for SES), while
  * league/flysystem-aws-s3-v3 is NOT installed — and the `s3` disk block in
  * config/filesystems.php is configured 'throw' => false, which would turn every
  * failure into a silently wrong value (a failed write returning false, a failed
- * mimeType() returning false and being coerced to an empty Content-Type).
- * Going straight to the client keeps StorageInterface the only contract.
- *
- * "S3-compatible" covers the object operations, not the whole product: this
- * driver works against AWS S3, Cloudflare R2, Backblaze B2, Wasabi,
- * DigitalOcean Spaces and MinIO by changing `endpoint` and credentials.
- * It deliberately does NOT set object ACLs and does NOT construct a public
- * hostname, because those differ per vendor — R2 implements no ACL parameters
- * at all, and its public host is a bound custom domain, not its API endpoint.
- * Public serving is one explicit setting: public_base_url.
+ * mimeType() returning false and being coerced into an empty Content-Type).
  */
 class S3Storage implements StorageInterface, ProvidesPublicUrl
 {
+    /** Regions the connect form offers. */
+    public const REGIONS = [
+        'us-east-1' => 'US East (N. Virginia)',
+        'us-east-2' => 'US East (Ohio)',
+        'us-west-1' => 'US West (N. California)',
+        'us-west-2' => 'US West (Oregon)',
+        'af-south-1' => 'Africa (Cape Town)',
+        'ap-east-1' => 'Asia Pacific (Hong Kong)',
+        'ap-south-1' => 'Asia Pacific (Mumbai)',
+        'ap-northeast-1' => 'Asia Pacific (Tokyo)',
+        'ap-northeast-2' => 'Asia Pacific (Seoul)',
+        'ap-northeast-3' => 'Asia Pacific (Osaka)',
+        'ap-southeast-1' => 'Asia Pacific (Singapore)',
+        'ap-southeast-2' => 'Asia Pacific (Sydney)',
+        'ap-southeast-3' => 'Asia Pacific (Jakarta)',
+        'ca-central-1' => 'Canada (Central)',
+        'eu-central-1' => 'Europe (Frankfurt)',
+        'eu-west-1' => 'Europe (Ireland)',
+        'eu-west-2' => 'Europe (London)',
+        'eu-west-3' => 'Europe (Paris)',
+        'eu-north-1' => 'Europe (Stockholm)',
+        'eu-south-1' => 'Europe (Milan)',
+        'il-central-1' => 'Israel (Tel Aviv)',
+        'me-central-1' => 'Middle East (UAE)',
+        'me-south-1' => 'Middle East (Bahrain)',
+        'sa-east-1' => 'South America (São Paulo)',
+    ];
+
     private ?S3Client $client = null;
 
     /**
@@ -48,32 +72,106 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
 
     public static function displayName(): string
     {
-        return 'S3-compatible object storage';
+        return 'Amazon S3';
     }
 
+    /**
+     * Validation + secret declaration for the whole configuration.
+     *
+     * The settings screen collects these in two stages (credentials first, then
+     * bucket) but that is a UI concern owned by this plugin's own controller —
+     * the host renders nothing from this and needs no notion of a wizard.
+     */
     public static function configFields(): array
     {
         return [
             'cols' => [
-                'bucket' => 'required|string|max:255',
-                'region' => 'required|string|max:64',
                 'access_key' => 'required|string|max:255',
                 'secret_key' => 'required|string|max:255',
-                'endpoint' => 'nullable|url|max:255',
+                'region' => 'required|string|max:64',
+                'bucket' => 'required|string|max:255',
+                'public_access' => 'nullable|boolean',
                 'public_base_url' => 'nullable|url|max:255',
-                'path_style' => 'nullable|boolean',
             ],
             'frontend_cols' => [
-                'bucket' => ['type' => 'text', 'label' => 'Bucket'],
-                'region' => ['type' => 'text', 'label' => 'Region'],
                 'access_key' => ['type' => 'text', 'label' => 'Access key ID'],
                 'secret_key' => ['type' => 'password', 'label' => 'Secret access key', 'secret' => true],
-                'endpoint' => ['type' => 'text', 'label' => 'Endpoint'],
-                'public_base_url' => ['type' => 'text', 'label' => 'Public base URL'],
-                'path_style' => ['type' => 'checkbox', 'label' => 'Use path-style addressing'],
+                'region' => ['type' => 'select', 'label' => 'Region'],
+                'bucket' => ['type' => 'select', 'label' => 'Bucket'],
+                'public_access' => ['type' => 'checkbox', 'label' => 'Serve files directly from S3'],
+                'public_base_url' => ['type' => 'text', 'label' => 'CDN base URL'],
             ],
         ];
     }
+
+    // ─── stage 1: credentials ───
+
+    /**
+     * Are these credentials valid?
+     *
+     * Separate from probe() because at this point no bucket has been chosen —
+     * there is nothing to write to yet. Plugin-internal; the host never calls
+     * it, so it stays off StorageInterface.
+     */
+    public function probeCredentials(): ProbeResult
+    {
+        try {
+            $this->client()->listBuckets();
+        } catch (AwsException $e) {
+            return ProbeResult::fail($this->humanise($e));
+        } catch (\Throwable $e) {
+            return ProbeResult::fail(trans('s3::messages.error.unreachable', ['reason' => $e->getMessage()]));
+        }
+
+        return ProbeResult::ok(trans('s3::messages.probe.credentials_ok'));
+    }
+
+    /**
+     * Buckets these credentials can see.
+     *
+     * @return array{ok: bool, buckets: list<string>, message: ?string}
+     *
+     * A key scoped to one bucket legitimately cannot list — a common
+     * production setup, not an error. The caller falls back to a text input,
+     * but it must SAY so rather than render an empty dropdown that reads as
+     * "you have no buckets".
+     */
+    public function listBuckets(): array
+    {
+        try {
+            $result = $this->client()->listBuckets();
+        } catch (AwsException $e) {
+            return ['ok' => false, 'buckets' => [], 'message' => $this->humanise($e)];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'buckets' => [], 'message' => $e->getMessage()];
+        }
+
+        $buckets = array_map(static fn ($b) => (string) $b['Name'], $result['Buckets'] ?? []);
+        sort($buckets);
+
+        return ['ok' => true, 'buckets' => $buckets, 'message' => null];
+    }
+
+    /**
+     * The region a bucket actually lives in, or null when it cannot be read.
+     *
+     * A bucket in a different region than the one configured still works for
+     * most calls (the SDK follows the redirect) but produces a wrong public
+     * URL, so the settings screen offers to correct it.
+     */
+    public function bucketRegion(string $bucket): ?string
+    {
+        try {
+            $loc = $this->client()->getBucketLocation(['Bucket' => $bucket])['LocationConstraint'];
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        // The API returns '' (or null) for the original us-east-1 region.
+        return $loc ?: 'us-east-1';
+    }
+
+    // ─── stage 2: the bucket ───
 
     public function probe(): ProbeResult
     {
@@ -96,26 +194,25 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
                 'Key' => $key,
             ]);
         } catch (AwsException $e) {
-            // A probe answers a question; it never propagates. The admin sees
-            // this message, so give them the vendor's own words.
-            return ProbeResult::fail(
-                'Could not write to the bucket: '.($e->getAwsErrorMessage() ?: $e->getMessage())
-            );
+            // A probe answers a question; it never propagates.
+            return ProbeResult::fail($this->humanise($e));
         } catch (\Throwable $e) {
-            return ProbeResult::fail('Could not reach the storage service: '.$e->getMessage());
+            return ProbeResult::fail(trans('s3::messages.error.unreachable', ['reason' => $e->getMessage()]));
         }
 
         if ($body !== 'probe') {
-            return ProbeResult::fail('Wrote a test object but read back different bytes.');
+            return ProbeResult::fail(trans('s3::messages.error.readback_mismatch'));
         }
 
         $warnings = [];
-        if ($this->publicBaseUrl() === null) {
-            $warnings[] = trans('s3::messages.warning.no_public_base_url');
+        if ($this->publicUrlBase() === null) {
+            $warnings[] = trans('s3::messages.warning.proxying');
         }
 
         return ProbeResult::ok(trans('s3::messages.probe.ok'), $warnings);
     }
+
+    // ─── StorageInterface ───
 
     public function store(File $file, Storable $asset): string
     {
@@ -152,11 +249,7 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
                 'CopySource' => rawurlencode($this->bucket().'/'.$fromKey),
             ]);
         } catch (AwsException $e) {
-            throw new \RuntimeException(
-                "Failed to copy [{$fromKey}] to [{$toKey}]: ".($e->getAwsErrorMessage() ?: $e->getMessage()),
-                0,
-                $e
-            );
+            throw new \RuntimeException("Failed to copy [{$fromKey}] to [{$toKey}]: ".$this->humanise($e), 0, $e);
         }
 
         return true;
@@ -172,11 +265,7 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
                 'Key' => $key,
             ])['Body'];
         } catch (AwsException $e) {
-            throw new \RuntimeException(
-                "Cannot read [{$key}]: ".($e->getAwsErrorMessage() ?: $e->getMessage()),
-                0,
-                $e
-            );
+            throw new \RuntimeException("Cannot read [{$key}]: ".$this->humanise($e), 0, $e);
         }
     }
 
@@ -185,8 +274,8 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
         $key = $this->keyFor($asset);
 
         try {
-            // Register the s3:// wrapper so the object can be streamed to the
-            // client instead of buffered whole in PHP memory.
+            // The s3:// wrapper streams the object to the client instead of
+            // buffering the whole body in PHP memory.
             $this->client()->registerStreamWrapper();
             $stream = fopen('s3://'.$this->bucket().'/'.$key, 'rb');
         } catch (\Throwable $e) {
@@ -205,14 +294,10 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
         try {
             return $this->client()->doesObjectExist($this->bucket(), $this->keyFor($asset));
         } catch (AwsException $e) {
-            // "Does it exist?" has two honest answers, and an auth or network
-            // failure is neither. Returning false here would render a broken
-            // bucket as "you have no files".
-            throw new \RuntimeException(
-                'Cannot check the storage service: '.($e->getAwsErrorMessage() ?: $e->getMessage()),
-                0,
-                $e
-            );
+            // "Does it exist?" has two honest answers and an auth or network
+            // failure is neither. Returning false would render a broken bucket
+            // as "you have no files".
+            throw new \RuntimeException('Cannot check the storage service: '.$this->humanise($e), 0, $e);
         }
     }
 
@@ -247,23 +332,47 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
     }
 
     /**
-     * A durable URL, or null when this configuration has no public front.
+     * A durable URL, or null to let the app serve the bytes.
      *
-     * Never derived from bucket + region: that shape is AWS-specific, and on R2
-     * the public host is a bound custom domain unrelated to the API endpoint.
-     * The admin tells us the URL — which is also how a CDN in front of the
-     * bucket (CloudFront, Cloudflare, Bunny) is configured: it is just a
-     * different base.
+     * Null is a configuration answer, not a failure: proxying always works, it
+     * just carries the traffic.
      */
     public function publicUrl(Storable $asset): ?string
     {
-        $base = $this->publicBaseUrl();
+        $base = $this->publicUrlBase();
 
-        if ($base === null) {
+        return $base === null ? null : $base.'/'.$this->keyFor($asset);
+    }
+
+    /**
+     * Where public objects are served from — a CDN if one is configured,
+     * otherwise the bucket's own regional endpoint.
+     *
+     * Derivable only because the vendor is fixed. Returns null when direct
+     * serving was not switched on, which is the default: a bucket is private
+     * until someone deliberately opens it, and guessing otherwise would hand
+     * out URLs that 403.
+     */
+    private function publicUrlBase(): ?string
+    {
+        $cdn = $this->options['public_base_url'] ?? null;
+        if (is_string($cdn) && $cdn !== '') {
+            return rtrim($cdn, '/');
+        }
+
+        if (empty($this->options['public_access'])) {
             return null;
         }
 
-        return rtrim($base, '/').'/'.$this->keyFor($asset);
+        return $this->bucketUrl();
+    }
+
+    /** The bucket's regional website-style base URL. */
+    public function bucketUrl(): string
+    {
+        $region = $this->options['region'] ?? 'us-east-1';
+
+        return 'https://'.$this->bucket().'.s3.'.$region.'.amazonaws.com';
     }
 
     // ─── internals ───
@@ -279,9 +388,9 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
             'Body' => $body,
         ];
 
-        // No 'ACL' key: R2 implements no ACL parameters, and a bucket that
-        // should be public is made public in the vendor's console. Sending one
-        // would fail on some providers and silently do nothing on others.
+        // No 'ACL' key. Modern buckets have ACLs disabled by default
+        // (BucketOwnerEnforced) and reject the parameter outright; public
+        // access is a bucket policy, set in the AWS console.
         if ($contentType !== null && $contentType !== '') {
             $args['ContentType'] = $contentType;
         }
@@ -289,11 +398,7 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
         try {
             $this->client()->putObject($args);
         } catch (AwsException $e) {
-            throw new \RuntimeException(
-                "Failed to write [{$key}]: ".($e->getAwsErrorMessage() ?: $e->getMessage()),
-                0,
-                $e
-            );
+            throw new \RuntimeException("Failed to write [{$key}]: ".$this->humanise($e), 0, $e);
         }
 
         return $key;
@@ -317,45 +422,38 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl
         if (!is_string($bucket) || $bucket === '') {
             throw new \RuntimeException(
                 'The S3 storage engine is active but has no bucket configured. '
-                .'Open the plugin settings and configure it.'
+                .'Open the plugin settings and choose one.'
             );
         }
 
         return $bucket;
     }
 
-    private function publicBaseUrl(): ?string
+    private function humanise(AwsException $e): string
     {
-        $url = $this->options['public_base_url'] ?? null;
-
-        return is_string($url) && $url !== '' ? $url : null;
+        // Named cases only — anything unrecognised keeps the vendor's own
+        // wording rather than being flattened into a generic message.
+        return match ($e->getAwsErrorCode()) {
+            'InvalidAccessKeyId' => trans('s3::messages.error.bad_key_id'),
+            'SignatureDoesNotMatch' => trans('s3::messages.error.bad_secret'),
+            'AccessDenied' => trans('s3::messages.error.access_denied'),
+            'NoSuchBucket' => trans('s3::messages.error.no_such_bucket'),
+            default => trans('s3::messages.error.vendor', [
+                'code' => $e->getAwsErrorCode() ?: 'unknown',
+                'message' => $e->getAwsErrorMessage() ?: $e->getMessage(),
+            ]),
+        };
     }
 
     private function client(): S3Client
     {
-        if ($this->client !== null) {
-            return $this->client;
-        }
-
-        $config = [
+        return $this->client ??= new S3Client([
             'version' => 'latest',
             'region' => $this->options['region'] ?? 'us-east-1',
             'credentials' => [
                 'key' => $this->options['access_key'] ?? '',
                 'secret' => $this->options['secret_key'] ?? '',
             ],
-        ];
-
-        // Anything that is not AWS itself: R2, B2, Wasabi, Spaces, MinIO.
-        if (!empty($this->options['endpoint'])) {
-            $config['endpoint'] = $this->options['endpoint'];
-        }
-
-        // MinIO and some gateways cannot do virtual-hosted-style addressing.
-        if (!empty($this->options['path_style'])) {
-            $config['use_path_style_endpoint'] = true;
-        }
-
-        return $this->client = new S3Client($config);
+        ]);
     }
 }
