@@ -1,0 +1,20 @@
+{
+    "name": "acelle/s3",
+    "title": "S3 Storage",
+    "version": "1.0.0",
+    "app_version": "4.0.24",
+    "description": "Store customer media, campaign attachments and template thumbnails in S3-compatible object storage. Works with Amazon S3, Cloudflare R2, Backblaze B2, Wasabi, DigitalOcean Spaces and MinIO, and can serve files through a CDN.",
+    "autoload": {
+        "psr-4": {
+            "Acelle\\S3\\": "src/"
+        }
+    },
+    "extra": {
+        "setting-route": "\\Acelle\\S3\\Controllers\\SettingsController@index",
+        "laravel": {
+            "providers": [
+                "Acelle\\S3\\ServiceProvider"
+            ]
+        }
+    }
+}
