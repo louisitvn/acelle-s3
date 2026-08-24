@@ -57,6 +57,9 @@ class SettingsController extends Controller
             // Only to pre-select the radio. Read off the driver rather than the
             // raw option so a pre-rename row still selects correctly.
             'delivery' => $driver->deliveryMode()['mode'],
+            // For the state READOUT only — the switch lives on the host picker.
+            'isConfigured' => !empty($options['bucket']),
+            'isActive' => StorageEngine::where('is_active', true)->value('driver') === S3Storage::key(),
         ]);
     }
 

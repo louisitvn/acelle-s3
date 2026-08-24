@@ -27,6 +27,26 @@
     </div>
 @endif
 
+{{-- Is this engine actually serving files?
+     A READOUT, not a control — the switch itself stays on the host picker, so
+     this does not re-create the two-places-to-activate problem. Removing the
+     activation card removed this answer with it, and a page that configures a
+     backend has to say whether the backend is in use. --}}
+@if ($isActive)
+    <div class="mc-alert mc-alert-success" style="margin-bottom:var(--space-4);max-width:760px">
+        <span class="material-symbols-rounded" aria-hidden="true">check_circle</span>
+        <div>{{ trans('s3::messages.state.in_use') }}</div>
+    </div>
+@elseif ($isConfigured)
+    <div class="mc-alert mc-alert-info" style="margin-bottom:var(--space-4);max-width:760px">
+        <span class="material-symbols-rounded" aria-hidden="true">info</span>
+        <div>
+            {{ trans('s3::messages.state.not_in_use') }}
+            <a href="{{ route('refactor.admin.settings.storage') }}">{{ trans('s3::messages.state.go_choose') }}</a>
+        </div>
+    </div>
+@endif
+
 {{-- Connected account ---------------------------------------------------- --}}
 <div class="mc-card" style="margin-bottom:var(--space-4);max-width:760px">
     <div class="mc-card-body">
@@ -72,19 +92,21 @@
 {{-- Bucket + delivery ---------------------------------------------------- --}}
 <div class="mc-card" style="margin-bottom:var(--space-4);max-width:760px">
     <div class="mc-card-body">
-        <h2 class="mc-card-title">{{ trans('s3::messages.section.bucket') }}</h2>
-
+        {{-- No card title: the card holds two sections, so a single "Bucket"
+             heading described only half of it — and repeated the field label
+             directly beneath it. Each section titles itself instead. --}}
         <form method="POST" action="{{ action([\Acelle\S3\Controllers\SettingsController::class, 'save']) }}">
             @csrf
 
+            <h3 class="mc-form-section-title" style="margin-top:0">{{ trans('s3::messages.section.bucket') }}</h3>
+
             <div class="mc-form-group">
-                <label for="s3-bucket" class="mc-form-label">{{ trans('s3::messages.field.bucket') }}</label>
 
                 @if ($bucketListingFailed)
                     {{-- A key scoped to one bucket cannot list, which is a normal
                          production setup. Say so and take the name by hand rather
                          than showing an empty dropdown that reads as "no buckets". --}}
-                    <input id="s3-bucket" type="text" name="bucket"
+                    <input id="s3-bucket" type="text" name="bucket" aria-label="{{ trans('s3::messages.field.bucket') }}"
                            class="mc-form-input @error('bucket') is-invalid @enderror"
                            value="{{ old('bucket', $options['bucket'] ?? '') }}">
                     <p class="mc-form-help">
@@ -92,7 +114,7 @@
                         <br><small>{{ $bucketListingMessage }}</small>
                     </p>
                 @else
-                    <select id="s3-bucket" name="bucket"
+                    <select id="s3-bucket" name="bucket" aria-label="{{ trans('s3::messages.field.bucket') }}"
                             class="mc-form-input @error('bucket') is-invalid @enderror">
                         <option value="">{{ trans('s3::messages.bucket.choose') }}</option>
                         @foreach ($buckets as $name)
