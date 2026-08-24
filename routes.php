@@ -38,6 +38,4 @@ Route::group([
     Route::post('connect', 'SettingsController@connect')->name('plugin.acelle.s3.connect');
     Route::post('disconnect', 'SettingsController@disconnect')->name('plugin.acelle.s3.disconnect');
     Route::post('save', 'SettingsController@save')->name('plugin.acelle.s3.save');
-    Route::post('activate', 'SettingsController@activate')->name('plugin.acelle.s3.activate');
-    Route::post('deactivate', 'SettingsController@deactivate')->name('plugin.acelle.s3.deactivate');
 });

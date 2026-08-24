@@ -119,7 +119,7 @@
                  with a precedence rule between them, which is what made the help
                  text read backwards and left "which should hide when the other
                  is set?" unanswerable. Three exclusive choices, no precedence. --}}
-            @php $delivery = old('delivery', $effectiveDelivery['mode']); @endphp
+            @php $delivery = old('delivery', $delivery); @endphp
 
             {{-- mc-import-settings — the app's own "pick one of N, each with an
                  explanation, one of them revealing sub-options" component,
@@ -132,9 +132,15 @@
                         <span class="mc-import-settings-mode-body">
                             <span class="mc-import-settings-mode-label">{{ trans('s3::messages.delivery.' . $mode . '.label') }}</span>
                             <span class="mc-import-settings-mode-desc">
-                                {{ trans('s3::messages.delivery.' . $mode . '.help') }}
+                                {{-- The bucket line ends in a colon, so only use it
+                                     once there is an address to follow it. Before a
+                                     bucket is chosen it read "served from:" with
+                                     nothing after it. --}}
                                 @if ($mode === 'bucket' && $bucketUrl)
+                                    {{ trans('s3::messages.delivery.bucket.help_with_url') }}
                                     <br><code>{{ $bucketUrl }}/…</code>
+                                @else
+                                    {{ trans('s3::messages.delivery.' . $mode . '.help') }}
                                 @endif
                             </span>
                         </span>
@@ -159,20 +165,13 @@
                 @error('delivery')<p class="mc-form-error">{{ $message }}</p>@enderror
             </div>
 
-            {{-- What is live right now, which is not always what is selected: a
-                 'cdn' choice saved with a blank address serves through the app. --}}
-            <div class="mc-alert {{ $effectiveDelivery['direct'] ? 'mc-alert-success' : 'mc-alert-info' }}"
-                 style="margin-top:var(--space-3)">
-                <span class="material-symbols-rounded" aria-hidden="true">
-                    {{ $effectiveDelivery['direct'] ? 'bolt' : 'dns' }}
-                </span>
-                <div>
-                    <strong>{{ $effectiveDelivery['label'] }}</strong>
-                    @if ($effectiveDelivery['base'])
-                        <br><code>{{ $effectiveDelivery['base'] }}/…</code>
-                    @endif
-                </div>
-            </div>
+            {{-- No live-state line here. It was needed when delivery was a
+                 checkbox plus a CDN field with a hidden precedence, where the
+                 outcome genuinely could not be read off the controls. With one
+                 radio group the selected option IS the answer, so the line only
+                 restated the label above it — and worse, it reported the SAVED
+                 state beside an unsaved selection, so the two disagreed until
+                 you pressed Save. --}}
 
             <div style="margin-top:var(--space-4)">
                 <button type="submit" class="mc-btn mc-btn-primary">
@@ -183,49 +182,12 @@
     </div>
 </div>
 
-{{-- Activation ----------------------------------------------------------- --}}
-<div class="mc-card" style="max-width:760px">
-    <div class="mc-card-body">
-        <h2 class="mc-card-title">{{ trans('s3::messages.section.status') }}</h2>
-
-        @if ($isActive)
-            <p><span class="mc-badge mc-badge-green">{{ trans('s3::messages.status.active') }}</span></p>
-        @elseif ($isConfigured)
-            <p><span class="mc-badge mc-badge-default">{{ trans('s3::messages.status.configured') }}</span></p>
-            <p class="mc-text-muted">{{ trans('s3::messages.status.other_active', ['driver' => $activeDriver]) }}</p>
-        @else
-            <p><span class="mc-badge mc-badge-default">{{ trans('s3::messages.status.not_configured') }}</span></p>
-        @endif
-
-        {{-- Stated before the switch, not after: nothing in the app moves
-             existing files, so switching strands whatever is already stored. --}}
-        <div class="mc-alert mc-alert-warning" style="margin-top:var(--space-3)">
-            <span class="material-symbols-rounded" aria-hidden="true">warning</span>
-            <div>
-                <strong>{{ trans('s3::messages.notice.no_migration.title') }}</strong><br>
-                {{ trans('s3::messages.notice.no_migration.body') }}
-            </div>
-        </div>
-
-        <div style="margin-top:var(--space-3);display:flex;gap:var(--space-2)">
-            @if ($isActive)
-                <form method="POST" action="{{ action([\Acelle\S3\Controllers\SettingsController::class, 'deactivate']) }}">
-                    @csrf
-                    <button type="submit" class="mc-btn mc-btn-secondary">
-                        {{ trans('s3::messages.action.deactivate') }}
-                    </button>
-                </form>
-            @elseif ($isConfigured)
-                <form method="POST" action="{{ action([\Acelle\S3\Controllers\SettingsController::class, 'activate']) }}">
-                    @csrf
-                    <button type="submit" class="mc-btn mc-btn-primary">
-                        {{ trans('s3::messages.action.activate') }}
-                    </button>
-                </form>
-            @endif
-        </div>
-    </div>
-</div>
+{{-- No activation card here on purpose.
+     Which engine is live is ONE decision and it belongs on the host picker
+     (Settings > Storage Engine), which also carries the "switching does not
+     move existing files" warning. A second place to activate, with its own
+     copy of that warning, is two sources of truth for one switch. This page
+     configures the connection; the host page chooses what runs. --}}
 
 @endsection
 

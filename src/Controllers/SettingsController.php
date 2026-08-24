@@ -54,11 +54,9 @@ class SettingsController extends Controller
             'bucketListingMessage' => $listing['message'],
             'regionLabel' => S3Storage::REGIONS[$options['region'] ?? ''] ?? null,
             'bucketUrl' => !empty($options['bucket']) ? $driver->bucketUrl() : null,
-            // Derived from the driver, never re-read from the options here.
-            'effectiveDelivery' => $this->describeDelivery($driver),
-            'isConfigured' => !empty($options['bucket']),
-            'isActive' => StorageEngine::where('is_active', true)->value('driver') === S3Storage::key(),
-            'activeDriver' => StorageEngine::where('is_active', true)->value('driver'),
+            // Only to pre-select the radio. Read off the driver rather than the
+            // raw option so a pre-rename row still selects correctly.
+            'delivery' => $driver->deliveryMode()['mode'],
         ]);
     }
 
@@ -171,6 +169,13 @@ class SettingsController extends Controller
             $message .= ' '.$warning;
         }
 
+        // Configuring here does not switch the app over — that is the host
+        // picker's job. Point at it, since finishing this form otherwise looks
+        // like the whole job is done.
+        if (StorageEngine::where('is_active', true)->value('driver') !== S3Storage::key()) {
+            $message .= ' '.trans('s3::messages.saved_next_step');
+        }
+
         return redirect()->action([self::class, 'index'])->with('alert-success', $message);
     }
 
@@ -201,46 +206,6 @@ class SettingsController extends Controller
             ->with('alert-success', trans('s3::messages.disconnected'));
     }
 
-    public function activate(Request $request)
-    {
-        $this->authorizeAdmin($request);
-
-        $engine = $this->engineRow();
-
-        if (!$engine->exists || empty($engine->options['bucket'])) {
-            return redirect()->back()->with('alert-error', trans('s3::messages.error.not_configured'));
-        }
-
-        $probe = (new S3Storage($engine->decryptedOptions()))->probe();
-
-        if (!$probe->ok) {
-            return redirect()->back()->with('alert-error', $probe->message);
-        }
-
-        StorageEngine::query()->update(['is_active' => false]);
-        $engine->is_active = true;
-        $engine->save();
-
-        return redirect()->action([self::class, 'index'])
-            ->with('alert-success', trans('s3::messages.activated'));
-    }
-
-    /**
-     * Deliberately NOT gated on a probe: switching an engine off must work even
-     * when that engine is broken, or a bad configuration is a one-way door.
-     */
-    public function deactivate(Request $request)
-    {
-        $this->authorizeAdmin($request);
-
-        if (!$this->makeLocalActive()) {
-            return redirect()->back()->with('alert-error', trans('s3::messages.error.no_local'));
-        }
-
-        return redirect()->action([self::class, 'index'])
-            ->with('alert-success', trans('s3::messages.deactivated'));
-    }
-
     private function makeLocalActive(): bool
     {
         $local = StorageEngine::where('driver', 'local')->first();
@@ -254,30 +219,6 @@ class SettingsController extends Controller
         $local->save();
 
         return true;
-    }
-
-    /**
-     * Label the delivery mode the driver reports.
-     *
-     * match with no default arm: a new mode must be given copy here rather
-     * than silently rendering as one of the existing ones.
-     *
-     * @return array{direct: bool, base: string|null, label: string}
-     */
-    private function describeDelivery(S3Storage $driver): array
-    {
-        $delivery = $driver->deliveryMode();
-
-        return [
-            'mode' => $delivery['mode'],
-            'direct' => $delivery['direct'],
-            'base' => $delivery['base'],
-            'label' => match ($delivery['mode']) {
-                'cdn' => trans('s3::messages.delivery.cdn.live'),
-                'bucket' => trans('s3::messages.delivery.bucket.live'),
-                'proxy' => trans('s3::messages.delivery.proxy.live'),
-            },
-        ];
     }
 
     private function engineRow(): StorageEngine
