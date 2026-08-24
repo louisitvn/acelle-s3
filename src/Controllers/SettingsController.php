@@ -211,15 +211,14 @@ class SettingsController extends Controller
 
     private function makeLocalActive(): bool
     {
-        $local = StorageEngine::where('driver', 'local')->first();
-
-        if ($local === null) {
+        if (!StorageEngine::where('driver', 'local')->exists()) {
             return false;
         }
 
-        StorageEngine::query()->update(['is_active' => false]);
-        $local->is_active = true;
-        $local->save();
+        // Host-owned atomic swap. The inline version here had the same
+        // dirty-tracking hole as the picker's: clear every flag, then a save()
+        // that wrote nothing, leaving zero active rows.
+        StorageEngine::activate('local');
 
         return true;
     }
