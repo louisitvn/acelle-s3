@@ -15,6 +15,11 @@
 
 {{-- Pitch banner — the host's own component, same shape and 180×140
      illustration slot as the Campaigns list, rather than a bespoke panel. --}}
+{{-- Both blocks share one width. The banner is full-bleed by default, but
+     the form below it is not, so at desktop widths the illustration ended up
+     marooned top-right with an empty column under it. Constraining the pair
+     puts the illustration back beside the text it belongs to. --}}
+<div style="max-width:900px">
 <div class="mc-banner mc-banner-open">
     <div class="mc-banner-content">
         <div class="mc-banner-title">{{ trans('s3::messages.pitch.heading') }}</div>
@@ -97,7 +102,7 @@
     </div>
 @endif
 
-<div class="mc-card" style="max-width:640px">
+<div class="mc-card">
     <div class="mc-card-body">
         <h2 class="mc-card-title">{{ trans('s3::messages.connect.heading') }}</h2>
         <p class="mc-text-muted">{{ trans('s3::messages.connect.intro') }}</p>
@@ -148,4 +153,5 @@
     </div>
 </div>
 
+</div>
 @endsection
