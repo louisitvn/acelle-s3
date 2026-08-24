@@ -19,7 +19,7 @@
     <div class="mc-banner-content">
         <div class="mc-banner-title">{{ trans('s3::messages.pitch.heading') }}</div>
         <div class="mc-banner-desc">{{ trans('s3::messages.pitch.lede') }}</div>
-        <div class="mc-banner-meta">
+        <div class="mc-banner-meta" style="flex-wrap:wrap;row-gap:var(--space-2)">
             <span class="mc-banner-meta-item">
                 <span class="material-symbols-rounded">verified</span>
                 <span class="mc-banner-meta-value">{{ trans('s3::messages.pitch.durability_value') }}</span>
@@ -33,7 +33,16 @@
                 <span class="material-symbols-rounded">bolt</span>
                 {{ trans('s3::messages.pitch.delivery_label') }}
             </span>
+            <span class="mc-banner-meta-item">
+                <span class="material-symbols-rounded">account_balance</span>
+                {{ trans('s3::messages.pitch.ownership_label') }}
+            </span>
         </div>
+
+        {{-- What the next step actually asks for. The banner previously stopped
+             at the pitch, so the reader met the credentials form without having
+             been told what kind of key it wants. --}}
+        <p class="mc-banner-desc" style="margin-bottom:0">{{ trans('s3::messages.pitch.requirement') }}</p>
     </div>
 
     <div class="mc-banner-illustration">

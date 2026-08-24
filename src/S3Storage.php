@@ -374,21 +374,20 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl, HasSetupPage
      */
     public function deliveryMode(): array
     {
+        $mode = $this->delivery();
         $base = $this->publicUrlBase();
 
-        if ($base === null) {
-            return ['mode' => 'proxy', 'direct' => false, 'base' => null];
-        }
-
-        $cdn = $this->options['public_base_url'] ?? null;
-        $viaCdn = is_string($cdn) && $cdn !== '';
-
         return [
-            'mode' => $viaCdn ? 'cdn' : 'bucket',
-            'direct' => true,
+            // A 'cdn' choice with a blank address yields no base; report what
+            // actually happens (proxy), not what was picked.
+            'mode' => $base === null ? 'proxy' : $mode,
+            'direct' => $base !== null,
             'base' => $base,
         ];
     }
+
+    /** The three delivery choices, for the settings form. */
+    public const DELIVERY_MODES = ['proxy', 'bucket', 'cdn'];
 
     /**
      * Where public objects are served from — a CDN if one is configured,
@@ -401,17 +400,40 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl, HasSetupPage
      */
     public function publicUrlBase(): ?string
     {
+        // ONE field decides this, so there is no precedence rule to remember.
+        // It used to be two independent controls — a "serve from the bucket"
+        // checkbox and a CDN address — where the CDN silently won. Two controls
+        // for one decision is what made the help text read backwards and left
+        // "which one should hide when the other is set?" with no good answer.
+        return match ($this->delivery()) {
+            'cdn' => rtrim((string) ($this->options['public_base_url'] ?? ''), '/') ?: null,
+            'bucket' => $this->bucketUrl(),
+            'proxy' => null,
+        };
+    }
+
+    /**
+     * @return 'proxy'|'bucket'|'cdn'
+     */
+    private function delivery(): string
+    {
+        $delivery = $this->options['delivery'] ?? null;
+
+        if (in_array($delivery, ['proxy', 'bucket', 'cdn'], true)) {
+            return $delivery;
+        }
+
+        // A row written before this became one field. Read the old pair once,
+        // in the same precedence it had then, so an existing configuration does
+        // not quietly drop to proxy.
         $cdn = $this->options['public_base_url'] ?? null;
         if (is_string($cdn) && $cdn !== '') {
-            return rtrim($cdn, '/');
+            return 'cdn';
         }
 
-        if (empty($this->options['public_access'])) {
-            return null;
-        }
-
-        return $this->bucketUrl();
+        return !empty($this->options['public_access']) ? 'bucket' : 'proxy';
     }
+
 
     /** The bucket's regional website-style base URL. */
     public function bucketUrl(): string

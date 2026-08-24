@@ -30,28 +30,42 @@
 {{-- Connected account ---------------------------------------------------- --}}
 <div class="mc-card" style="margin-bottom:var(--space-4);max-width:760px">
     <div class="mc-card-body">
-        <h2 class="mc-card-title">{{ trans('s3::messages.section.account') }}</h2>
+        {{-- Title left, state and its one action right. Disconnect belongs with
+             the status it acts on, not stranded under the key it is not about. --}}
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4)">
+            <h2 class="mc-card-title" style="margin-bottom:0">{{ trans('s3::messages.section.account') }}</h2>
 
-        <dl class="mc-definition-list">
-            <dt>{{ trans('s3::messages.field.access_key') }}</dt>
-            <dd><code>{{ $options['access_key'] ?? '' }}</code></dd>
+            <div style="display:flex;align-items:center;gap:var(--space-3);flex-shrink:0">
+                {{-- The app's own connected indicator, not a bespoke dot. --}}
+                <span class="mc-form-grid-meta-connected">
+                    <span class="material-symbols-rounded" aria-hidden="true">check_circle</span>
+                    {{ trans('s3::messages.status.connected') }}
+                </span>
+
+                <form method="POST"
+                      action="{{ action([\Acelle\S3\Controllers\SettingsController::class, 'disconnect']) }}">
+                    @csrf
+                    <button type="submit" class="mc-btn mc-btn-secondary mc-btn-sm">
+                        {{ trans('s3::messages.action.disconnect') }}
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div style="display:flex;gap:var(--space-8);flex-wrap:wrap;margin-top:var(--space-4)">
+            <div>
+                <div class="mc-form-label">{{ trans('s3::messages.field.access_key') }}</div>
+                <code>{{ $options['access_key'] ?? '' }}</code>
+            </div>
             @if (!empty($options['region']))
                 {{-- Derived from the bucket, never chosen by hand. --}}
-                <dt>{{ trans('s3::messages.field.region') }}</dt>
-                <dd>
+                <div>
+                    <div class="mc-form-label">{{ trans('s3::messages.field.region') }}</div>
                     <code>{{ $options['region'] }}</code>
                     @if ($regionLabel)<span class="mc-text-muted">— {{ $regionLabel }}</span>@endif
-                </dd>
+                </div>
             @endif
-        </dl>
-
-        <form method="POST" style="margin-top:var(--space-3)"
-              action="{{ action([\Acelle\S3\Controllers\SettingsController::class, 'disconnect']) }}">
-            @csrf
-            <button type="submit" class="mc-btn mc-btn-default">
-                {{ trans('s3::messages.action.disconnect') }}
-            </button>
-        </form>
+        </div>
     </div>
 </div>
 
@@ -101,39 +115,52 @@
             <h3 class="mc-form-section-title">{{ trans('s3::messages.section.delivery') }}</h3>
             <p class="mc-text-muted">{{ trans('s3::messages.delivery.intro') }}</p>
 
-            {{-- CDN first, because it WINS. The previous order put the checkbox
-                 above and told the reader "leave the CDN blank to use the bucket
-                 address", which implies the CDN field depends on the checkbox —
-                 the opposite of publicUrlBase(), where a CDN address overrides
-                 the checkbox entirely. Order now matches precedence. --}}
-            <div class="mc-form-group">
-                <label for="s3-cdn" class="mc-form-label">{{ trans('s3::messages.field.public_base_url') }}</label>
-                <input id="s3-cdn" type="text" name="public_base_url"
-                       class="mc-form-input @error('public_base_url') is-invalid @enderror"
-                       value="{{ old('public_base_url', $options['public_base_url'] ?? '') }}"
-                       placeholder="https://d111111abcdef8.cloudfront.net">
-                <p class="mc-form-help">{{ trans('s3::messages.field.public_base_url.help') }}</p>
-                @error('public_base_url')<p class="mc-form-error">{{ $message }}</p>@enderror
-            </div>
+            {{-- One question, one control. This was a checkbox plus a CDN field
+                 with a precedence rule between them, which is what made the help
+                 text read backwards and left "which should hide when the other
+                 is set?" unanswerable. Three exclusive choices, no precedence. --}}
+            @php $delivery = old('delivery', $effectiveDelivery['mode']); @endphp
 
-            <div class="mc-form-group">
-                <label class="mc-form-check">
-                    <input type="hidden" name="public_access" value="0">
-                    <input type="checkbox" name="public_access" value="1"
-                           {{ old('public_access', $options['public_access'] ?? false) ? 'checked' : '' }}>
-                    <span>{{ trans('s3::messages.field.public_access') }}</span>
-                </label>
-                <p class="mc-form-help">
-                    {{ trans('s3::messages.field.public_access.help') }}
-                    @if ($bucketUrl)
-                        <br><code>{{ $bucketUrl }}/…</code>
+            {{-- mc-import-settings — the app's own "pick one of N, each with an
+                 explanation, one of them revealing sub-options" component,
+                 including the :has(input:checked) selected state. --}}
+            <div class="mc-import-settings" data-s3-delivery>
+                @foreach (\Acelle\S3\S3Storage::DELIVERY_MODES as $mode)
+                    <label class="mc-import-settings-mode">
+                        <input type="radio" name="delivery" value="{{ $mode }}"
+                               {{ $delivery === $mode ? 'checked' : '' }}>
+                        <span class="mc-import-settings-mode-body">
+                            <span class="mc-import-settings-mode-label">{{ trans('s3::messages.delivery.' . $mode . '.label') }}</span>
+                            <span class="mc-import-settings-mode-desc">
+                                {{ trans('s3::messages.delivery.' . $mode . '.help') }}
+                                @if ($mode === 'bucket' && $bucketUrl)
+                                    <br><code>{{ $bucketUrl }}/…</code>
+                                @endif
+                            </span>
+                        </span>
+                    </label>
+
+                    @if ($mode === 'cdn')
+                        {{-- Revealed only by its own option, so the address can
+                             never sit there looking active while another mode is
+                             selected. --}}
+                        <div class="mc-import-settings-suboptions" data-s3-cdn-field
+                             @unless ($delivery === 'cdn') style="display:none" @endunless>
+                            <input type="text" name="public_base_url"
+                                   class="mc-form-input @error('public_base_url') is-invalid @enderror"
+                                   value="{{ old('public_base_url', $options['public_base_url'] ?? '') }}"
+                                   placeholder="https://d111111abcdef8.cloudfront.net">
+                            <p class="mc-form-help">{{ trans('s3::messages.field.public_base_url.help') }}</p>
+                            @error('public_base_url')<p class="mc-form-error">{{ $message }}</p>@enderror
+                        </div>
                     @endif
-                </p>
+                @endforeach
+
+                @error('delivery')<p class="mc-form-error">{{ $message }}</p>@enderror
             </div>
 
-            {{-- Say which of the three modes is actually in effect. Two fields
-                 with an override between them is exactly where an admin ends up
-                 believing a setting applies when it does not. --}}
+            {{-- What is live right now, which is not always what is selected: a
+                 'cdn' choice saved with a blank address serves through the app. --}}
             <div class="mc-alert {{ $effectiveDelivery['direct'] ? 'mc-alert-success' : 'mc-alert-info' }}"
                  style="margin-top:var(--space-3)">
                 <span class="material-symbols-rounded" aria-hidden="true">
@@ -162,7 +189,7 @@
         <h2 class="mc-card-title">{{ trans('s3::messages.section.status') }}</h2>
 
         @if ($isActive)
-            <p><span class="mc-badge mc-badge-success">{{ trans('s3::messages.status.active') }}</span></p>
+            <p><span class="mc-badge mc-badge-green">{{ trans('s3::messages.status.active') }}</span></p>
         @elseif ($isConfigured)
             <p><span class="mc-badge mc-badge-default">{{ trans('s3::messages.status.configured') }}</span></p>
             <p class="mc-text-muted">{{ trans('s3::messages.status.other_active', ['driver' => $activeDriver]) }}</p>
@@ -184,7 +211,7 @@
             @if ($isActive)
                 <form method="POST" action="{{ action([\Acelle\S3\Controllers\SettingsController::class, 'deactivate']) }}">
                     @csrf
-                    <button type="submit" class="mc-btn mc-btn-default">
+                    <button type="submit" class="mc-btn mc-btn-secondary">
                         {{ trans('s3::messages.action.deactivate') }}
                     </button>
                 </form>
@@ -200,4 +227,23 @@
     </div>
 </div>
 
+@endsection
+
+@section('scripts')
+<script>
+// Reveal the CDN address only for the option that uses it. Server-side
+// validation still requires it when 'cdn' is chosen — this only keeps the form
+// from showing a field that would be ignored.
+(function () {
+    var group = document.querySelector('[data-s3-delivery]');
+    if (!group) return;
+    var field = group.querySelector('[data-s3-cdn-field]');
+    if (!field) return;
+
+    group.addEventListener('change', function (e) {
+        if (e.target.name !== 'delivery') return;
+        field.style.display = e.target.value === 'cdn' ? '' : 'none';
+    });
+})();
+</script>
 @endsection

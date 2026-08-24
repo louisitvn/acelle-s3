@@ -128,8 +128,10 @@ class SettingsController extends Controller
 
         $validated = $request->validate([
             'bucket' => 'required|string|max:255',
-            'public_access' => 'nullable|boolean',
-            'public_base_url' => 'nullable|url|max:255',
+            'delivery' => 'required|string|in:'.implode(',', S3Storage::DELIVERY_MODES),
+            // Choosing "from a CDN" without an address would silently fall back
+            // to serving through the app — refuse instead of half-applying it.
+            'public_base_url' => 'required_if:delivery,cdn|nullable|url|max:255',
         ]);
 
         $previousRegion = $engine->decryptedOptions()['region'] ?? null;
@@ -267,12 +269,13 @@ class SettingsController extends Controller
         $delivery = $driver->deliveryMode();
 
         return [
+            'mode' => $delivery['mode'],
             'direct' => $delivery['direct'],
             'base' => $delivery['base'],
             'label' => match ($delivery['mode']) {
-                'cdn' => trans('s3::messages.delivery.via_cdn'),
-                'bucket' => trans('s3::messages.delivery.via_bucket'),
-                'proxy' => trans('s3::messages.delivery.via_app'),
+                'cdn' => trans('s3::messages.delivery.cdn.live'),
+                'bucket' => trans('s3::messages.delivery.bucket.live'),
+                'proxy' => trans('s3::messages.delivery.proxy.live'),
             },
         ];
     }
