@@ -363,6 +363,34 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl, HasSetupPage
     }
 
     /**
+     * Which of the three delivery modes is actually in effect.
+     *
+     * Derived from publicUrlBase() rather than re-reading the options, so the
+     * settings screen cannot drift from what the serve path really does — the
+     * CDN address overriding the checkbox is exactly the kind of precedence an
+     * independently-written UI gets backwards.
+     *
+     * @return array{mode: 'cdn'|'bucket'|'proxy', direct: bool, base: string|null}
+     */
+    public function deliveryMode(): array
+    {
+        $base = $this->publicUrlBase();
+
+        if ($base === null) {
+            return ['mode' => 'proxy', 'direct' => false, 'base' => null];
+        }
+
+        $cdn = $this->options['public_base_url'] ?? null;
+        $viaCdn = is_string($cdn) && $cdn !== '';
+
+        return [
+            'mode' => $viaCdn ? 'cdn' : 'bucket',
+            'direct' => true,
+            'base' => $base,
+        ];
+    }
+
+    /**
      * Where public objects are served from — a CDN if one is configured,
      * otherwise the bucket's own regional endpoint.
      *
@@ -371,7 +399,7 @@ class S3Storage implements StorageInterface, ProvidesPublicUrl, HasSetupPage
      * until someone deliberately opens it, and guessing otherwise would hand
      * out URLs that 403.
      */
-    private function publicUrlBase(): ?string
+    public function publicUrlBase(): ?string
     {
         $cdn = $this->options['public_base_url'] ?? null;
         if (is_string($cdn) && $cdn !== '') {

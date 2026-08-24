@@ -101,6 +101,21 @@
             <h3 class="mc-form-section-title">{{ trans('s3::messages.section.delivery') }}</h3>
             <p class="mc-text-muted">{{ trans('s3::messages.delivery.intro') }}</p>
 
+            {{-- CDN first, because it WINS. The previous order put the checkbox
+                 above and told the reader "leave the CDN blank to use the bucket
+                 address", which implies the CDN field depends on the checkbox —
+                 the opposite of publicUrlBase(), where a CDN address overrides
+                 the checkbox entirely. Order now matches precedence. --}}
+            <div class="mc-form-group">
+                <label for="s3-cdn" class="mc-form-label">{{ trans('s3::messages.field.public_base_url') }}</label>
+                <input id="s3-cdn" type="text" name="public_base_url"
+                       class="mc-form-input @error('public_base_url') is-invalid @enderror"
+                       value="{{ old('public_base_url', $options['public_base_url'] ?? '') }}"
+                       placeholder="https://d111111abcdef8.cloudfront.net">
+                <p class="mc-form-help">{{ trans('s3::messages.field.public_base_url.help') }}</p>
+                @error('public_base_url')<p class="mc-form-error">{{ $message }}</p>@enderror
+            </div>
+
             <div class="mc-form-group">
                 <label class="mc-form-check">
                     <input type="hidden" name="public_access" value="0">
@@ -116,14 +131,20 @@
                 </p>
             </div>
 
-            <div class="mc-form-group">
-                <label for="s3-cdn" class="mc-form-label">{{ trans('s3::messages.field.public_base_url') }}</label>
-                <input id="s3-cdn" type="text" name="public_base_url"
-                       class="mc-form-input @error('public_base_url') is-invalid @enderror"
-                       value="{{ old('public_base_url', $options['public_base_url'] ?? '') }}"
-                       placeholder="https://cdn.example.com">
-                <p class="mc-form-help">{{ trans('s3::messages.field.public_base_url.help') }}</p>
-                @error('public_base_url')<p class="mc-form-error">{{ $message }}</p>@enderror
+            {{-- Say which of the three modes is actually in effect. Two fields
+                 with an override between them is exactly where an admin ends up
+                 believing a setting applies when it does not. --}}
+            <div class="mc-alert {{ $effectiveDelivery['direct'] ? 'mc-alert-success' : 'mc-alert-info' }}"
+                 style="margin-top:var(--space-3)">
+                <span class="material-symbols-rounded" aria-hidden="true">
+                    {{ $effectiveDelivery['direct'] ? 'bolt' : 'dns' }}
+                </span>
+                <div>
+                    <strong>{{ $effectiveDelivery['label'] }}</strong>
+                    @if ($effectiveDelivery['base'])
+                        <br><code>{{ $effectiveDelivery['base'] }}/…</code>
+                    @endif
+                </div>
             </div>
 
             <div style="margin-top:var(--space-4)">

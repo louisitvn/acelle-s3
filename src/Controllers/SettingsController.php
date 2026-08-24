@@ -54,6 +54,8 @@ class SettingsController extends Controller
             'bucketListingMessage' => $listing['message'],
             'regionLabel' => S3Storage::REGIONS[$options['region'] ?? ''] ?? null,
             'bucketUrl' => !empty($options['bucket']) ? $driver->bucketUrl() : null,
+            // Derived from the driver, never re-read from the options here.
+            'effectiveDelivery' => $this->describeDelivery($driver),
             'isConfigured' => !empty($options['bucket']),
             'isActive' => StorageEngine::where('is_active', true)->value('driver') === S3Storage::key(),
             'activeDriver' => StorageEngine::where('is_active', true)->value('driver'),
@@ -250,6 +252,29 @@ class SettingsController extends Controller
         $local->save();
 
         return true;
+    }
+
+    /**
+     * Label the delivery mode the driver reports.
+     *
+     * match with no default arm: a new mode must be given copy here rather
+     * than silently rendering as one of the existing ones.
+     *
+     * @return array{direct: bool, base: string|null, label: string}
+     */
+    private function describeDelivery(S3Storage $driver): array
+    {
+        $delivery = $driver->deliveryMode();
+
+        return [
+            'direct' => $delivery['direct'],
+            'base' => $delivery['base'],
+            'label' => match ($delivery['mode']) {
+                'cdn' => trans('s3::messages.delivery.via_cdn'),
+                'bucket' => trans('s3::messages.delivery.via_bucket'),
+                'proxy' => trans('s3::messages.delivery.via_app'),
+            },
+        ];
     }
 
     private function engineRow(): StorageEngine
