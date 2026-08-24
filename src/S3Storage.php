@@ -8,6 +8,7 @@ use Symfony\Component\HttpFoundation\File\File;
 use App\Library\Storage\StorageInterface;
 use App\Library\Storage\StorableInterface as Storable;
 use App\Library\Storage\Capabilities\ProvidesPublicUrl;
+use App\Library\Storage\Capabilities\HasSetupPage;
 use App\Library\Storage\ProbeResult;
 
 /**
@@ -26,8 +27,20 @@ use App\Library\Storage\ProbeResult;
  * failure into a silently wrong value (a failed write returning false, a failed
  * mimeType() returning false and being coerced into an empty Content-Type).
  */
-class S3Storage implements StorageInterface, ProvidesPublicUrl
+class S3Storage implements StorageInterface, ProvidesPublicUrl, HasSetupPage
 {
+    /**
+     * Where this engine gets configured.
+     *
+     * Resolved at render time, not at registration: this plugin's routes are
+     * loaded in its own boot(), so route() during register() would name a
+     * route that does not exist yet.
+     */
+    public static function setupUrl(): string
+    {
+        return route('plugin.acelle.s3.settings');
+    }
+
     /** Regions the connect form offers. */
     public const REGIONS = [
         'us-east-1' => 'US East (N. Virginia)',
