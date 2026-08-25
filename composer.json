@@ -1,9 +1,9 @@
 {
     "name": "acelle/s3",
-    "title": "S3 Storage",
+    "title": "Amazon S3 Storage",
     "version": "1.0.0",
     "app_version": "4.0.24",
-    "description": "Store customer media, campaign attachments and template thumbnails in S3-compatible object storage. Works with Amazon S3, Cloudflare R2, Backblaze B2, Wasabi, DigitalOcean Spaces and MinIO, and can serve files through a CDN.",
+    "description": "Keep customer media and campaign attachments in an Amazon S3 bucket instead of on the application server disk. Files can be served through the application, straight from the bucket, or from CloudFront in front of it. Several storage engines can run at once \u2014 switching affects new uploads only.",
     "autoload": {
         "psr-4": {
             "Acelle\\S3\\": "src/"
