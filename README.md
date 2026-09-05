@@ -53,18 +53,35 @@ No webhook, no cron, no extra service.
 
 ## Installation
 
-**From your Acelle dashboard** — download the ZIP, open **System → Plugins**, click **Install plugin**, upload it, then enable it from the **⋮** menu.
+Two ways. The first needs no files at all.
 
-**From source:**
+### Through Acelle, from the marketplace (recommended)
 
-```bash
-git clone https://github.com/louisitvn/acelle-s3.git
-cd acelle-s3
-git checkout 1.0.0          # always build from a tag
-./build.sh /tmp/out         # → /tmp/out/s3-1.0.0.zip
-```
+Your installation fetches the plugin itself — nothing to download, nothing to upload.
 
-**From the in-app marketplace** — if your installation is connected, open **Plugins → Install plugin → Connect** and install it from the catalog.
+1. In your Acelle admin, open **Plugins**.
+2. Click **Install plugin** and choose **Connect with marketplace**.
+3. Approve the connection once, then install **Amazon S3 Storage** from the catalog.
+
+[![Connecting an Acelle Mail installation to the plugin marketplace, with the Amazon S3 Storage plugin among those installed](https://acelle2026.s3.dualstack.us-east-1.amazonaws.com/plugin-install-from-marketplace.png)](https://acellesend.com/integrations)
+
+<sub>**Plugins → Install plugin → Connect with marketplace.** Installed plugins show their version and package name — `v1.0.0 · acelle/s3` on the card at the bottom right.</sub>
+
+When a new version is published it appears in the same place, so upgrading is the same three clicks.
+
+### Manually
+
+1. Download the ZIP — from the **Plugins** page of your account, or build it from source:
+
+   ```bash
+   git clone https://github.com/louisitvn/acelle-s3.git
+   cd acelle-s3
+   git checkout 1.0.0          # always build from a tag
+   ./build.sh /tmp/out         # → /tmp/out/s3-1.0.0.zip
+   ```
+
+2. In your Acelle admin, open **Plugins → Install plugin → Upload plugin package** and drop the ZIP in.
+3. Find **Amazon S3 Storage** in the list, open the **⋮** menu and choose **Enable**.
 
 ## Setting it up
 
